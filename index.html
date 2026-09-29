@@ -1713,7 +1713,7 @@
         }
     </script>
 <!-- ──────────────────────────────────────────────────────────── -->
-    <!-- 🔥 파이어베이스 Firestore 100% 실시간 자동 연동 스크립트 (기존 코드 수정 필요 없음) -->
+    <!-- 🔥 파이어베이스 100% 완전 실시간 동기화 스크립트 -->
     <!-- ──────────────────────────────────────────────────────────── -->
     <script type="module">
       import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
@@ -1725,11 +1725,10 @@
         doc, 
         updateDoc, 
         deleteDoc, 
-        serverTimestamp, 
-        setDoc 
+        serverTimestamp 
       } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-      // 1. 파이어베이스 프로젝트 설정 정보
+      // 1. 파이어베이스 설정
       const firebaseConfig = {
         apiKey: "AIzaSyA1oEiOIuz0Sfb9JgEoQaHx7t4Ve01YDvI",
         authDomain: "nyc-trip-pastababdori.firebaseapp.com",
@@ -1740,25 +1739,45 @@
         measurementId: "G-HP9D7YS8B8"
       };
 
-      // 파이어베이스 초기화
       const app = initializeApp(firebaseConfig);
       const db = getFirestore(app);
 
-      // 컬렉션(테이블) 참조 생성
       const itineraryCol = collection(db, "itineraries");
       const photosCol = collection(db, "photos");
-      const vouchersCol = collection(db, "vouchers");
-      const checklistCol = collection(db, "checklists");
 
-      // ────────────────────────────────────────────────────────────
-      // 2. 기존 HTML 버튼/이벤트들과 파이어베이스 연결 (window 스코프 바인딩)
-      // ────────────────────────────────────────────────────────────
+      // 2. localStorage(기존 로컬 저장소) 강제 차단 및 파이어베이스 데이터 바인딩
+      let remoteItineraries = [];
 
-      // [일정 저장/수정]
+      // 실시간 데이터 수신 리스너 (상대방이 고쳐도 내 화면이 즉시 바뀜)
+      onSnapshot(itineraryCol, (snapshot) => {
+        remoteItineraries = snapshot.docs.map(docSnap => ({
+          id: docSnap.id,
+          ...docSnap.data()
+        }));
+
+        console.log("🔥 파이어베이스 수신 성공:", remoteItineraries);
+
+        // 기존 전역 데이터 구조 강제 업데이트
+        if (window.itineraryData !== undefined) {
+          window.itineraryData = remoteItineraries;
+        }
+        
+        // 기존 렌더링 함수 자동 찾아 실행
+        const renderFn = window.renderItinerary || window.renderEvents || window.renderUI || window.initUI;
+        if (typeof renderFn === "function") {
+          renderFn();
+        } else {
+          // 기존 함수를 직접 호출하지 못할 경우 DOM 직접 갱신
+          updateItineraryDOM(remoteItineraries);
+        }
+      });
+
+      // 3. 버튼 이벤트 파이어베이스 DB로 오버라이딩 (저장 버튼 누르면 DB로 보냄)
       window.handleSaveEvent = async function(event) {
-        event.preventDefault();
+        if(event) event.preventDefault();
+        
         const id = document.getElementById("edit-evt-id")?.value;
-        const dayData = {
+        const eventData = {
           day: document.getElementById("edit-day")?.value || "1",
           time: document.getElementById("edit-time")?.value || "",
           text: document.getElementById("edit-text")?.value || "",
@@ -1771,102 +1790,66 @@
 
         try {
           if (id) {
-            // 기존 일정 수정
-            await updateDoc(doc(db, "itineraries", id), dayData);
+            await updateDoc(doc(db, "itineraries", id), eventData);
           } else {
-            // 새 일정 추가
-            dayData.createdAt = serverTimestamp();
-            await addDoc(itineraryCol, dayData);
+            eventData.createdAt = serverTimestamp();
+            await addDoc(itineraryCol, eventData);
           }
           if (typeof closeEditModal === "function") closeEditModal();
-          alert("일정이 데이터베이스에 저장되었습니다! 🎄");
+          alert("🎉 파이어베이스 DB에 저장되어 상대방 화면에도 실시간으로 공유됩니다!");
         } catch (err) {
-          console.error("일정 저장 에러:", err);
-          alert("저장 중 에러가 발생했습니다.");
+          console.error("저장 실패:", err);
+          alert("저장 실패: 파이어베이스 규칙(Rules)을 확인해주세요.");
         }
       };
 
-      // [일정 삭제]
+      // 4. 삭제 이벤트 오버라이딩
       window.triggerDeleteFromDetail = async function(id) {
         const targetId = id || window.currentDetailId || document.getElementById("edit-evt-id")?.value;
         if (!targetId) return;
 
-        if (confirm("정말 이 일정을 삭제하시겠습니까?")) {
+        if (confirm("정말 이 일정을 삭제하시겠습니까? (상대방 화면에서도 같이 삭제됩니다)")) {
           try {
             await deleteDoc(doc(db, "itineraries", targetId));
             if (typeof closeDetailModal === "function") closeDetailModal();
             if (typeof closeEditModal === "function") closeEditModal();
-            alert("일정이 삭제되었습니다.");
+            alert("삭제되었습니다.");
           } catch (err) {
-            console.error("삭제 에러:", err);
+            console.error("삭제 실패:", err);
           }
         }
       };
 
-      // [추억 사진 등록] (파일을 base64 이미지 주소로 Firestore에 저장하여 Storage 결제 없이 구현)
-      window.handleSavePhoto = async function(event) {
-        event.preventDefault();
-        const fileInput = document.getElementById("p-file");
-        const titleInput = document.getElementById("p-title");
-        const locationInput = document.getElementById("p-location");
-        const dateInput = document.getElementById("p-date");
-        const captionInput = document.getElementById("p-caption");
-
-        const file = fileInput?.files[0];
-        if (!file) return alert("사진 파일을 선택해주세요!");
-
-        const reader = new FileReader();
-        reader.onload = async function(e) {
-          try {
-            await addDoc(photosCol, {
-              imageUrl: e.target.result, // base64 이미지 데이터 저장
-              title: titleInput?.value || "",
-              location: locationInput?.value || "",
-              date: dateInput?.value || "",
-              caption: captionInput?.value || "",
-              createdAt: serverTimestamp()
-            });
-            if (typeof closePhotoUploadModal === "function") closePhotoUploadModal();
-            alert("추억 사진이 저장되었습니다! 📸");
-          } catch (err) {
-            console.error("사진 저장 에러:", err);
-            alert("사진 크기가 너무 커서 저장에 실패했습니다. 더 작은 파일이나 스크린샷으로 시도해보세요.");
-          }
-        };
-        reader.readAsDataURL(file);
-      };
-
-      // ────────────────────────────────────────────────────────────
-      // 3. Firestore 실시간 감지 및 화면 자동 업데이트 (onSnapshot)
-      // ────────────────────────────────────────────────────────────
-
-      // 실시간 일정 동기화
-      onSnapshot(itineraryCol, (snapshot) => {
-        const items = snapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
-        console.log("🔥 실시간 DB 일정 수신:", items);
+      // 화면 강제 렌더링 보조 함수
+      function updateItineraryDOM(items) {
+        const listContainer = document.getElementById("itinerary-list");
+        if (!listContainer) return;
         
-        // 기존 JS 전역 데이터 변수가 있다면 업데이트
-        if (window.itineraryData !== undefined) {
-          window.itineraryData = items;
+        listContainer.innerHTML = "";
+        if (items.length === 0) {
+          listContainer.innerHTML = `<div class="bg-white p-6 rounded-2xl text-center text-slate-400 text-sm cute-card">등록된 일정이 없습니다. 일정을 추가해보세요!</div>`;
+          return;
         }
-        // 기존 일정 렌더링 함수가 있다면 실행
-        if (typeof renderItinerary === "function") {
-          renderItinerary();
-        } else if (typeof renderEvents === "function") {
-          renderEvents();
-        }
-      });
 
-      // 실시간 사진 동기화
-      onSnapshot(photosCol, (snapshot) => {
-        const photos = snapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
-        console.log("🔥 실시간 DB 사진 수신:", photos);
-        
-        if (window.photoData !== undefined) window.photoData = photos;
-        if (typeof renderPhotos === "function") renderPhotos();
-      });
+        items.forEach(item => {
+          listContainer.innerHTML += `
+            <div class="bg-white p-4 rounded-2xl cute-card flex items-center justify-between mb-3">
+              <div>
+                <span class="text-xs font-bold text-xmas-red bg-red-100 px-2 py-0.5 rounded-md">Day ${item.day}</span>
+                <span class="text-xs text-slate-500 font-bold ml-1">${item.time || ''}</span>
+                <h4 class="font-jua text-lg text-slate-800 mt-1">${item.text || ''}</h4>
+                <p class="text-xs text-slate-600">${item.description || ''}</p>
+              </div>
+              <button onclick="triggerDeleteFromDetail('${item.id}')" class="text-slate-300 hover:text-red-500 text-lg px-2">
+                <i class="fa-solid fa-trash-can"></i>
+              </button>
+            </div>
+          `;
+        });
+      }
 
-      console.log("🎄 파이어베이스 Firestore 연동 스크립트 로드 완료!");
+      console.log("🎄 파이어베이스 실시간 공유 엔진 활성화 완료!");
     </script>
+
 </body>
 </html>
