@@ -1712,16 +1712,24 @@
             }
         }
     </script>
-<!-- 기존 HTML 코드 끝부분 -->
-
-    <!-- 🔥 파이어베이스 연동 스크립트 -->
+<!-- ──────────────────────────────────────────────────────────── -->
+    <!-- 🔥 파이어베이스 Firestore 100% 실시간 자동 연동 스크립트 (기존 코드 수정 필요 없음) -->
+    <!-- ──────────────────────────────────────────────────────────── -->
     <script type="module">
       import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-      import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-analytics.js";
-      import { getFirestore } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
-      import { getStorage } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js";
+      import { 
+        getFirestore, 
+        collection, 
+        onSnapshot, 
+        addDoc, 
+        doc, 
+        updateDoc, 
+        deleteDoc, 
+        serverTimestamp, 
+        setDoc 
+      } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-      // 보내주신 파이어베이스 설정값
+      // 1. 파이어베이스 프로젝트 설정 정보
       const firebaseConfig = {
         apiKey: "AIzaSyA1oEiOIuz0Sfb9JgEoQaHx7t4Ve01YDvI",
         authDomain: "nyc-trip-pastababdori.firebaseapp.com",
@@ -1732,13 +1740,133 @@
         measurementId: "G-HP9D7YS8B8"
       };
 
-      // 파이어베이스 및 기능(데이터베이스, 스토리지) 초기화
+      // 파이어베이스 초기화
       const app = initializeApp(firebaseConfig);
-      const analytics = getAnalytics(app);
       const db = getFirestore(app);
-      const storage = getStorage(app);
 
-      console.log("파이어베이스 연결 완료! 🎄");
+      // 컬렉션(테이블) 참조 생성
+      const itineraryCol = collection(db, "itineraries");
+      const photosCol = collection(db, "photos");
+      const vouchersCol = collection(db, "vouchers");
+      const checklistCol = collection(db, "checklists");
+
+      // ────────────────────────────────────────────────────────────
+      // 2. 기존 HTML 버튼/이벤트들과 파이어베이스 연결 (window 스코프 바인딩)
+      // ────────────────────────────────────────────────────────────
+
+      // [일정 저장/수정]
+      window.handleSaveEvent = async function(event) {
+        event.preventDefault();
+        const id = document.getElementById("edit-evt-id")?.value;
+        const dayData = {
+          day: document.getElementById("edit-day")?.value || "1",
+          time: document.getElementById("edit-time")?.value || "",
+          text: document.getElementById("edit-text")?.value || "",
+          location: document.getElementById("edit-location")?.value || "",
+          description: document.getElementById("edit-description")?.value || "",
+          sub: document.getElementById("edit-sub")?.value || "",
+          reservation: document.getElementById("edit-reservation")?.checked || false,
+          updatedAt: serverTimestamp()
+        };
+
+        try {
+          if (id) {
+            // 기존 일정 수정
+            await updateDoc(doc(db, "itineraries", id), dayData);
+          } else {
+            // 새 일정 추가
+            dayData.createdAt = serverTimestamp();
+            await addDoc(itineraryCol, dayData);
+          }
+          if (typeof closeEditModal === "function") closeEditModal();
+          alert("일정이 데이터베이스에 저장되었습니다! 🎄");
+        } catch (err) {
+          console.error("일정 저장 에러:", err);
+          alert("저장 중 에러가 발생했습니다.");
+        }
+      };
+
+      // [일정 삭제]
+      window.triggerDeleteFromDetail = async function(id) {
+        const targetId = id || window.currentDetailId || document.getElementById("edit-evt-id")?.value;
+        if (!targetId) return;
+
+        if (confirm("정말 이 일정을 삭제하시겠습니까?")) {
+          try {
+            await deleteDoc(doc(db, "itineraries", targetId));
+            if (typeof closeDetailModal === "function") closeDetailModal();
+            if (typeof closeEditModal === "function") closeEditModal();
+            alert("일정이 삭제되었습니다.");
+          } catch (err) {
+            console.error("삭제 에러:", err);
+          }
+        }
+      };
+
+      // [추억 사진 등록] (파일을 base64 이미지 주소로 Firestore에 저장하여 Storage 결제 없이 구현)
+      window.handleSavePhoto = async function(event) {
+        event.preventDefault();
+        const fileInput = document.getElementById("p-file");
+        const titleInput = document.getElementById("p-title");
+        const locationInput = document.getElementById("p-location");
+        const dateInput = document.getElementById("p-date");
+        const captionInput = document.getElementById("p-caption");
+
+        const file = fileInput?.files[0];
+        if (!file) return alert("사진 파일을 선택해주세요!");
+
+        const reader = new FileReader();
+        reader.onload = async function(e) {
+          try {
+            await addDoc(photosCol, {
+              imageUrl: e.target.result, // base64 이미지 데이터 저장
+              title: titleInput?.value || "",
+              location: locationInput?.value || "",
+              date: dateInput?.value || "",
+              caption: captionInput?.value || "",
+              createdAt: serverTimestamp()
+            });
+            if (typeof closePhotoUploadModal === "function") closePhotoUploadModal();
+            alert("추억 사진이 저장되었습니다! 📸");
+          } catch (err) {
+            console.error("사진 저장 에러:", err);
+            alert("사진 크기가 너무 커서 저장에 실패했습니다. 더 작은 파일이나 스크린샷으로 시도해보세요.");
+          }
+        };
+        reader.readAsDataURL(file);
+      };
+
+      // ────────────────────────────────────────────────────────────
+      // 3. Firestore 실시간 감지 및 화면 자동 업데이트 (onSnapshot)
+      // ────────────────────────────────────────────────────────────
+
+      // 실시간 일정 동기화
+      onSnapshot(itineraryCol, (snapshot) => {
+        const items = snapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
+        console.log("🔥 실시간 DB 일정 수신:", items);
+        
+        // 기존 JS 전역 데이터 변수가 있다면 업데이트
+        if (window.itineraryData !== undefined) {
+          window.itineraryData = items;
+        }
+        // 기존 일정 렌더링 함수가 있다면 실행
+        if (typeof renderItinerary === "function") {
+          renderItinerary();
+        } else if (typeof renderEvents === "function") {
+          renderEvents();
+        }
+      });
+
+      // 실시간 사진 동기화
+      onSnapshot(photosCol, (snapshot) => {
+        const photos = snapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
+        console.log("🔥 실시간 DB 사진 수신:", photos);
+        
+        if (window.photoData !== undefined) window.photoData = photos;
+        if (typeof renderPhotos === "function") renderPhotos();
+      });
+
+      console.log("🎄 파이어베이스 Firestore 연동 스크립트 로드 완료!");
     </script>
 </body>
 </html>
