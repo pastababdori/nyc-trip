@@ -1734,85 +1734,428 @@
     <!-- ──────────────────────────────────────────────────────────── -->
     <!-- 🔥 완벽한 실시간 연동 (Firebase 동기화 모듈) -->
     <!-- ──────────────────────────────────────────────────────────── -->
+    <!-- 🔥 FIREBASE REALTIME ALL-IN-ONE MODULE (사진 자동 압축 처리 완비) -->
     <script type="module">
-      import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-      import { 
-        getFirestore, 
-        doc, 
-        onSnapshot, 
-        setDoc 
-      } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { 
+            getFirestore, collection, onSnapshot, addDoc, doc, updateDoc, deleteDoc, serverTimestamp 
+        } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-      // 1. Firebase 설정
-      const firebaseConfig = {
-        apiKey: "AIzaSyA1oEiOIuz0Sfb9JgEoQaHx7t4Ve01YDvI",
-        authDomain: "nyc-trip-pastababdori.firebaseapp.com",
-        projectId: "nyc-trip-pastababdori",
-        storageBucket: "nyc-trip-pastababdori.firebasestorage.app",
-        messagingSenderId: "191759674501",
-        appId: "1:191759674501:web:05c3fd06cac48c40718dec",
-        measurementId: "G-HP9D7YS8B8"
-      };
+        // 7일치 원본 일정 전체 데이터베이스
+        const ORIGINAL_7DAYS_ITINERARY = [
+            // Day 1
+            { day: 1, time: "21:30", text: "✈️ 뉴어크 공항(EWR) 도착 및 입국 심사", location: "Newark Liberty International Airport", description: "에어프레미아 YP132 편으로 뉴어크 리버티 국제공항(EWR) 터미널 B도착. 입국 심사 후 수하물을 찾고 우버/한인택시를 이용해 롱아일랜드시티 숙소로 이동합니다.", reservation: false },
+            { day: 1, time: "23:00", text: "🏨 숙소 이동 & 체크인 (Vista LIC Hotel)", location: "Vista LIC Hotel Best Western Premier Collection", description: "롱아일랜드시티(LIC)에 위치한 쾌적한 호텔입니다. 체크인 후 내일 일정을 위해 따뜻하게 쉬어줍니다.", reservation: false },
+            
+            // Day 2
+            { day: 2, time: "10:00", text: "🏛️ 그랜드 센트럴 터미널 & 홀리데이 마켓", location: "Grand Central Terminal New York", description: "세계 최대 역 중 하나이자 에메랄드빛 천장 별자리가 유명한 그랜드 센트럴 터미널! 내부 밴더빌트 홀에서 열리는 홀리데이 마켓을 구경합니다.", reservation: false },
+            { day: 2, time: "11:30", text: "🍕 점심 식사 (아마스투 피자)", location: "Midtown Pizza NYC", description: "바삭하고 치즈 가득한 뉴욕 스타일 피자로 든든하게 점심 식사를 즐깁니다.", reservation: false },
+            { day: 2, time: "13:00", text: "✨ 5번가 명품거리 & Saks Fifth Avenue 외벽 쇼윈도", location: "Saks Fifth Avenue 5th Ave New York", description: "크리스마스 시즌 뉴욕 최고의 하이라이트! 삭스 피프스 애비뉴의 라이트 쇼와 5번가 대형 브랜드들의 연말 화려한 쇼윈도 장식을 감상합니다.", sub: "☕ 디저트 추천: 컬처 에스프레소 초코칩쿠키 & 라떼 OR 앙젤리나 파리 진한 핫초코", reservation: false },
+            { day: 2, time: "16:30", text: "✨ 탑 오브 더 락 전망대 (석양~야경 감상)", location: "Top of The Rock Rockefeller Center", description: "록펠러 센터 최상층 전망대! 엠파이어 스테이트 빌딩과 붉게 물드는 뉴욕의 석양부터 은하수 같은 밤 야경까지 한눈에 펼쳐집니다.", reservation: true },
+            { day: 2, time: "19:00", text: "🍽️ 저녁 식사 (미드타운 주변)", location: "Rockefeller Center Midtown NYC", description: "록펠러 센터 대형 크리스마스트리 불빛을 감상한 후 미드타운 근처 맛집에서 로맨틱한 크리스마스 이브 저녁을 먹습니다.", reservation: false },
+            { day: 2, time: "21:00", text: "🎷 버드랜드 크리스마스 이브 재즈 공연", location: "Birdland Jazz Club New York", description: "1949년부터 시작된 세계적 역사의 재즈 클럽! 감미로운 크리스마스 스페셜 재즈 연주와 음료를 즐기며 특별한 이브 밤을 마무리합니다.", reservation: true },
 
-      const app = initializeApp(firebaseConfig);
-      const db = getFirestore(app);
-      const docRef = doc(db, "nyc_trip_plan", "shared_data");
+            // Day 3
+            { day: 3, time: "10:00", text: "🎁 크리스마스 스펙타큘러 공연 (라디오 시티)", location: "Radio City Music Hall", description: "전 세계적으로 유명한 라디오 시티 록켓츠(The Rockettes)의 칼군무와 성탄 뮤지컬 쇼! 크리스마스 당일에 꼭 봐야 할 시그니처 공연입니다.", reservation: true },
+            { day: 3, time: "12:30", text: "⛸️ 브라이언트 파크 야외 스케이트 & 윈터 빌리지", location: "Bank of America Winter Village at Bryant Park", description: "빌딩 숲 사이 동화 같은 야외 스케이트장과 크리스마스 마켓!", sub: "🍩 간식/디저트: 윈터 빌리지 내 스트리트 푸드 (츄러스, 핫초코, 와플)", reservation: false },
+            { day: 3, time: "16:00", text: "🏙️ M&M'S 뉴욕 & 타임스퀘어 야경", location: "Times Square New York M&M Store", description: "화려한 네온사인과 전광판이 반짝이는 뉴욕의 중심! M&M스 스토어에서 귀여운 초콜릿 기념품을 사고, 로스 타코스 넘버원에서 인생 타코를 맛보세요.", sub: "🌮 간식: 로스 타코스 넘버원 | 🍰 디저트: 주니어스 치즈케이크", reservation: false },
+            { day: 3, time: "18:00", text: "🥩 킨스 스테이크하우스 (Keens Steakhouse)", location: "Keens Steakhouse New York", description: "1885년부터 영업한 130년 넘는 전통의 뉴욕 대표 스테이크 명가! 시그니처 파이프 장식 천장과 극강의 육즙을 자랑하는 스테이크가 백미입니다.", reservation: true },
 
-      let isUpdatingFromRemote = false;
+            // Day 4
+            { day: 4, time: "09:00", text: "🥯 아침/브런치: 팝업 베이글 또는 에세 베이글", location: "PopUp Bagels NYC", description: "겉은 바삭속은 쫀득한 갓 구운 뉴욕 베이글! 팝업 베이글의 크림치즈 딥이나 30년 전통 에세 베이글의 연어 크림치즈 베이글을 추천합니다.", reservation: false },
+            { day: 4, time: "10:00", text: "🖼️ MoMA (뉴욕 현대 미술관)", location: "The Museum of Modern Art MoMA", description: "반 고흐의 <별이 빛나는 밤>, 피카소, 모네, 워홀 등 현대 미술 마스터피스들이 총집합된 미술관!", reservation: false },
+            { day: 4, time: "13:30", text: "🛍️ Macy's 백화점 & MLB 메인 스토어", location: "Macys Herald Square", description: "세계 최대 규모를 자랑하는 메이시스 백화점의 크리스마스 디스플레이와 MLB 스토어를 구경합니다.", sub: "😋 간식/점심: 할랄가이즈 스트리트 푸드", reservation: false },
+            { day: 4, time: "17:00", text: "🍽️ 저녁 식사 (브로드웨이 극장가)", location: "Broadway Theater District NYC", description: "뮤지컬 관람 전 브로드웨이 극장가 근처 맛집에서 맛있는 저녁 식사를 합니다.", reservation: false },
+            { day: 4, time: "19:00", text: "🎭 브로드웨이 뮤지컬 관람", location: "Broadway Theatre NYC", description: "알라딘, 위키드, 라이온킹 등 세계 최고 수준의 브로드웨이 뮤지컬 직관!", reservation: true },
 
-      // 2. 실시간 데이터 수신 (상대방이 고치면 화면 즉시 반영)
-      onSnapshot(docRef, (snapshot) => {
-        if (snapshot.exists()) {
-          const data = snapshot.data();
-          isUpdatingFromRemote = true;
+            // Day 5
+            { day: 5, time: "09:30", text: "🗽 자유의 여신상 페리 (배터리 파크 출발)", location: "Battery Park Liberty Cruise Ferry", description: "배터리 파크에서 Statue City Cruises 페리를 타고 리버티 섬으로 이동! 자유의 여신상을 눈앞에서 직관합니다.", reservation: true },
+            { day: 5, time: "12:30", text: "🥪 점심 식사: 캇츠 델리카테슨 (Katz's Delicatessen)", location: "Katzs Delicatessen New York", description: "영화 <해리가 샐리를 만났을 때> 촬영지이자 1888년 시작된 훈제 고기 샌드위치 명가! 촉촉한 파스트라미 샌드위치가 시그니처입니다.", reservation: false },
+            { day: 5, time: "14:00", text: "📸 덤보(DUMBO) 포토존 & 브루클린 산책", location: "DUMBO Manhattan Bridge View", description: "붉은 벽돌 건물 사이로 맨해튼 브릿지가 딱 들어맞는 유명 포토존!", sub: "☕ 카페/디저트: 응커피(% Arabica Brooklyn) 또는 Jacques Torres Chocolate", reservation: false },
+            { day: 5, time: "16:00", text: "🌉 브루클린 브릿지 건너기 (노을 감상)", location: "Brooklyn Bridge New York", description: "브루클린에서 맨해튼 방향으로 걸으며 분홍빛으로 물드는 황홀한 노을 풍경과 빌딩 야경을 관람합니다.", reservation: false },
+            { day: 5, time: "18:00", text: "🍽️ 저녁 식사: 브루클린 야경 명소 레스토랑", location: "Celestine Brooklyn or The River Cafe", description: "맨해튼 교각과 강 건너 야경이 한눈에 보이는 낭만적인 리버뷰 레스토랑에서 다이닝을 즐깁니다.", reservation: true },
 
-          if (data.currentItinerary) {
-            window.currentItinerary = data.currentItinerary;
-            localStorage.setItem('nyc_itinerary_data', JSON.stringify(data.currentItinerary));
-            if (typeof window.renderItinerary === 'function') window.renderItinerary();
-          }
+            // Day 6
+            { day: 6, time: "10:30", text: "🦞 첼시 마켓 (랍스타 & 브라우니)", location: "Chelsea Market New York", description: "과거 오레오 공장을 개조한 감성 실내 마켓! 싱싱한 랍스타 플래터로 점심을 먹고 Fat Witch Bakery에서 브라우니를 디저트로 맛봅니다.", reservation: false },
+            { day: 6, time: "12:30", text: "🌿 하이라인 산책로 & 허드슨 야드 (Vessel)", location: "The High Line New York", description: "버려진 고가 철로를 도심 공원으로 재탄생시킨 하이라인! 독특한 건축물 Vessel이 있는 허드슨 야드까지 이동합니다.", reservation: false },
+            { day: 6, time: "14:30", text: "🛍️ 소호(SoHo) 쇼핑 & 거닐기", location: "SoHo Shopping District NYC", description: "트렌디한 편집숍, 명품 브랜드, 귀여운 스트리트 샵이 가득한 소호!", sub: "🥯 디저트: 아폴로 베이글 또는 라파예트 슈프림 크루아상", reservation: false },
+            { day: 6, time: "17:30", text: "🍽️ 저녁 식사 (매디슨 스퀘어 가든 주변)", location: "Madison Square Garden", description: "MSG 경기장 근처 힙한 펍이나 피자집에서 간편하고 맛있는 저녁 식사를 즐깁니다.", reservation: false },
+            { day: 6, time: "19:30", text: "🏀 NBA 경기 직관 (매디슨 스퀘어 가든)", location: "Madison Square Garden New York Knicks", description: "세계 스포츠의 메카 MSG에서 펼쳐지는 뉴욕 닉스의 뜨거운 NBA 현장 응원!", reservation: true },
 
-          if (data.checkedListState) {
-            window.checkedListState = data.checkedListState;
-            localStorage.setItem('nyc_checklist', JSON.stringify(data.checkedListState));
-            if (typeof window.renderChecklist === 'function') window.renderChecklist();
-          }
+            // Day 7
+            { day: 7, time: "10:00", text: "🦕 자연사 박물관 (American Museum of Natural History)", location: "American Museum of Natural History", description: "영화 <박물관이 살아있다>의 배경! 거대한 공룡 뼈대와 대왕고래 모형을 관람합니다.", sub: "🍪 디저트: 르뱅 베이커리 (센트럴파크 가기 전 두툼한 르뱅쿠키 포장)", reservation: false },
+            { day: 7, time: "13:30", text: "🌳 센트럴파크 산책 & 콜럼버스 서클 마켓", location: "Central Park Columbus Circle Holiday Market", description: "겨울 운치 가득한 센트럴파크를 거닐고, 콜럼버스 서클 홀리데이 마켓에서 마지막 크리스마스 소품들을 쇼핑합니다.", reservation: false },
+            { day: 7, time: "16:30", text: "🏨 숙소 이동 & 짐 찾기", location: "Vista LIC Hotel", description: "숙소(Vista LIC Hotel)로 돌아가 맡겨둔 캐리어 및 쇼핑짐을 수령하고 정돈합니다.", reservation: false },
+            { day: 7, time: "19:00", text: "🚗 뉴어크 공항(EWR)으로 출발", location: "Newark Liberty International Airport", description: "여유있게 택시나 차량 서비스로 뉴어크 리버티 공항으로 출발합니다.", reservation: false },
+            { day: 7, time: "21:00", text: "🛫 공항 도착 및 출국 수속", location: "EWR Airport Terminal B", description: "항공권 탑승 수속 및 텍스 리펀, 면세점 둘러보기.", reservation: false },
+            { day: 7, time: "00:01", text: "✈️ 인천행 YP132 항공편 탑승 (12/30 00:01)", location: "EWR Gate YP132", description: "12월 30일 밤 00:01 출발 편으로 한국으로 안전하게 귀국합니다.", reservation: false }
+        ];
 
-          if (data.userVouchers) {
-            window.userVouchers = data.userVouchers;
-            localStorage.setItem('nyc_vouchers', JSON.stringify(data.userVouchers));
-            if (typeof window.renderVouchers === 'function') window.renderVouchers();
-          }
-
-          if (data.userPhotos) {
-            window.userPhotos = data.userPhotos;
-            localStorage.setItem('nyc_photos', JSON.stringify(data.userPhotos));
-            if (typeof window.renderPhotos === 'function') window.renderPhotos();
-          }
-
-          isUpdatingFromRemote = false;
-        } else {
-          // 문서가 없는 경우 최초 내 데이터를 DB로 올림
-          window.syncToFirebase();
-        }
-      });
-
-      // 3. 내 데이터 DB 업로드 전역 함수
-      window.syncToFirebase = function() {
-        if (isUpdatingFromRemote) return;
-        
-        const payload = {
-          currentItinerary: window.currentItinerary,
-          checkedListState: window.checkedListState,
-          userVouchers: window.userVouchers,
-          userPhotos: window.userPhotos,
-          updatedAt: new Date().toISOString()
+        const firebaseConfig = {
+            apiKey: "AIzaSyA1oEiOIuz0Sfb9JgEoQaHx7t4Ve01YDvI",
+            authDomain: "nyc-trip-pastababdori.firebaseapp.com",
+            projectId: "nyc-trip-pastababdori",
+            storageBucket: "nyc-trip-pastababdori.firebasestorage.app",
+            messagingSenderId: "191759674501",
+            appId: "1:191759674501:web:05c3fd06cac48c40718dec",
+            measurementId: "G-HP9D7YS8B8"
         };
 
-        setDoc(docRef, payload)
-          .then(() => console.log("🔥 파이어베이스 실시간 동기화 완료!"))
-          .catch(err => console.error("동기화 실패:", err));
-      };
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        const itineraryCol = collection(db, "itineraries");
+        const photosCol = collection(db, "photos");
+        const vouchersCol = collection(db, "vouchers");
+
+        let remoteItineraries = [];
+        let currentFilterDay = 'all';
+        let activeDetailEvt = null;
+
+        // GLOBAL UI CONTROLS
+        window.switchTab = function(tabName) {
+            document.querySelectorAll('.tab-content').forEach(s => s.classList.add('hidden'));
+            document.querySelectorAll('.tab-btn').forEach(b => {
+                b.classList.remove('tab-active');
+                b.classList.add('bg-white', 'text-slate-700');
+            });
+            document.getElementById(`section-${tabName}`)?.classList.remove('hidden');
+            document.getElementById(`tab-${tabName}`)?.classList.add('tab-active');
+        };
+
+        window.filterDay = function(dayStr) {
+            currentFilterDay = dayStr;
+            document.querySelectorAll('.day-filter-btn').forEach(b => {
+                b.classList.remove('bg-xmas-green', 'text-white');
+                b.classList.add('bg-red-50', 'text-xmas-green');
+            });
+            const active = document.getElementById(`filter-btn-${dayStr}`);
+            if (active) {
+                active.classList.remove('bg-red-50', 'text-xmas-green');
+                active.classList.add('bg-xmas-green', 'text-white');
+            }
+            renderItinerary();
+        };
+
+        // 이미지 압축 헬퍼 함수 (Firestore 1MB 용량 초과 방지)
+        function compressImageFile(file, maxWidth = 800, quality = 0.6) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        const canvas = document.createElement('canvas');
+                        let width = img.width;
+                        let height = img.height;
+
+                        if (width > maxWidth) {
+                            height = Math.round((height * maxWidth) / width);
+                            width = maxWidth;
+                        }
+
+                        canvas.width = width;
+                        canvas.height = height;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0, width, height);
+                        resolve(canvas.toDataURL('image/jpeg', quality));
+                    };
+                    img.onerror = reject;
+                    img.src = e.target.result;
+                };
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+            });
+        }
+
+        // SEED DEFAULT 7 DAYS TO FIREBASE
+        window.seedInitialDataToFirebase = async function() {
+            if (confirm("파이어베이스 데이터베이스에 원래 작성하신 7일치 전체 일정을 모두 복원하여 저장할까요?")) {
+                try {
+                    for (const item of ORIGINAL_7DAYS_ITINERARY) {
+                        await addDoc(itineraryCol, {
+                            ...item,
+                            createdAt: serverTimestamp()
+                        });
+                    }
+                    alert("7일치 전체 일정이 파이어베이스 DB에 성공적으로 동기화되었습니다! 🎄");
+                } catch (err) {
+                    console.error(err);
+                    alert("동기화 실패: 파이어베이스 규칙(Rules)을 확인해주세요.");
+                }
+            }
+        };
+
+        // 1. ITINERARY REALTIME LISTEN & RENDER
+        onSnapshot(itineraryCol, (snapshot) => {
+            remoteItineraries = snapshot.docs.map(docSnap => ({
+                id: docSnap.id,
+                ...docSnap.data()
+            }));
+
+            if (snapshot.empty) {
+                ORIGINAL_7DAYS_ITINERARY.forEach(async (item) => {
+                    await addDoc(itineraryCol, { ...item, createdAt: serverTimestamp() });
+                });
+            } else {
+                renderItinerary();
+            }
+        });
+
+        function renderItinerary() {
+            const container = document.getElementById("itinerary-list");
+            if (!container) return;
+            container.innerHTML = "";
+
+            let items = remoteItineraries;
+            if (currentFilterDay !== 'all') {
+                items = remoteItineraries.filter(i => String(i.day) === String(currentFilterDay));
+            }
+
+            if (items.length === 0) {
+                container.innerHTML = `<div class="bg-white p-8 rounded-3xl text-center text-slate-400 text-sm cute-card">등록된 일정이 없습니다. 우측 상단의 '기본 일정 동기화' 버튼을 눌러보세요! 🎄</div>`;
+                return;
+            }
+
+            items.sort((a,b) => (Number(a.day) - Number(b.day)) || (a.time > b.time ? 1 : -1));
+
+            items.forEach(item => {
+                const badgeHtml = item.reservation ? `<span class="badge-reservation text-[10px] px-2 py-0.5 rounded-full ml-1.5 shrink-0">사전예약</span>` : '';
+                const subHtml = item.sub ? `<div class="mt-1.5 text-xs text-amber-900 bg-amber-50 p-2 rounded-xl border border-amber-200 font-bold">${item.sub}</div>` : '';
+
+                const card = document.createElement('div');
+                card.className = "bg-white rounded-3xl p-5 cute-card border-2 border-xmas-green relative cursor-pointer hover:border-xmas-brightred transition group";
+                card.onclick = () => openDetailModal(item.id);
+
+                card.innerHTML = `
+                    <div class="flex items-start justify-between gap-2 mb-2">
+                        <div class="flex items-center gap-2">
+                            <span class="text-xs font-bold bg-xmas-red text-white px-2.5 py-1 rounded-xl">Day ${item.day}</span>
+                            <span class="font-jua text-sm text-xmas-green bg-emerald-50 px-2.5 py-1 rounded-xl border border-emerald-200">${item.time || ''}</span>
+                            ${badgeHtml}
+                        </div>
+                        <div class="flex items-center gap-1 shrink-0" onclick="event.stopPropagation()">
+                            <button onclick="openEditModal('${item.id}')" class="text-slate-400 hover:text-amber-600 p-1 rounded-lg text-xs transition"><i class="fa-solid fa-pen-to-square"></i></button>
+                            <button onclick="triggerDeleteFromDetail('${item.id}')" class="text-slate-400 hover:text-red-600 p-1 rounded-lg text-xs transition"><i class="fa-solid fa-trash-can"></i></button>
+                        </div>
+                    </div>
+                    <h3 class="font-jua text-lg text-slate-800 group-hover:text-xmas-red transition">${item.text || ''}</h3>
+                    ${item.description ? `<p class="text-xs text-slate-600 mt-1 leading-relaxed bg-slate-50 p-2.5 rounded-xl border border-slate-100">${item.description}</p>` : ''}
+                    ${subHtml}
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        // 2. ITINERARY ACTIONS
+        document.getElementById("edit-event-form").addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const id = document.getElementById("edit-evt-id").value;
+            const data = {
+                day: parseInt(document.getElementById("edit-day").value) || 1,
+                time: document.getElementById("edit-time").value,
+                text: document.getElementById("edit-text").value,
+                location: document.getElementById("edit-location").value,
+                description: document.getElementById("edit-description").value,
+                sub: document.getElementById("edit-sub").value,
+                reservation: document.getElementById("edit-reservation").checked,
+                updatedAt: serverTimestamp()
+            };
+
+            try {
+                if (id) {
+                    await updateDoc(doc(db, "itineraries", id), data);
+                } else {
+                    data.createdAt = serverTimestamp();
+                    await addDoc(itineraryCol, data);
+                }
+                window.closeEditModal();
+            } catch (err) {
+                alert("저장 에러: Firebase 규칙을 확인해주세요!");
+            }
+        });
+
+        window.openDetailModal = function(id) {
+            const item = remoteItineraries.find(i => i.id === id);
+            if (!item) return;
+            activeDetailEvt = item;
+
+            document.getElementById('detail-time-badge').innerText = `${item.time || ''} | DAY ${item.day}`;
+            document.getElementById('detail-title').innerText = item.text || '';
+            document.getElementById('detail-description').innerText = item.description || '상세 정보가 없습니다.';
+            
+            const resBox = document.getElementById('detail-res-box');
+            if (item.reservation) resBox.classList.remove('hidden'); else resBox.classList.add('hidden');
+
+            const subBox = document.getElementById('detail-sub-box');
+            if (item.sub) {
+                document.getElementById('detail-sub-content').innerText = item.sub;
+                subBox.classList.remove('hidden');
+            } else subBox.classList.add('hidden');
+
+            const mapBtn = document.getElementById('detail-map-btn');
+            mapBtn.href = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(item.location || item.text)}`;
+
+            document.getElementById('modal-event-detail').classList.remove('hidden');
+        };
+
+        window.closeDetailModal = () => document.getElementById('modal-event-detail').classList.add('hidden');
+
+        window.triggerEditFromDetail = function() {
+            if (activeDetailEvt) {
+                closeDetailModal();
+                openEditModal(activeDetailEvt.id);
+            }
+        };
+
+        window.triggerDeleteFromDetail = async function(id) {
+            const targetId = id || activeDetailEvt?.id;
+            if (!targetId) return;
+            if (confirm("정말 이 일정을 삭제하시겠습니까? (상대방 화면에서도 삭제됩니다)")) {
+                await deleteDoc(doc(db, "itineraries", targetId));
+                closeDetailModal();
+            }
+        };
+
+        window.openAddModal = function(dayNum = 1) {
+            document.getElementById('edit-event-form').reset();
+            document.getElementById('edit-evt-id').value = '';
+            document.getElementById('edit-day').value = dayNum;
+            document.getElementById('edit-modal-title').innerHTML = `<span>✨</span> 새 일정 추가하기`;
+            document.getElementById('modal-event-edit').classList.remove('hidden');
+        };
+
+        window.openEditModal = function(id) {
+            const item = remoteItineraries.find(i => i.id === id);
+            if (!item) return;
+            document.getElementById('edit-evt-id').value = item.id;
+            document.getElementById('edit-day').value = item.day || 1;
+            document.getElementById('edit-time').value = item.time || '';
+            document.getElementById('edit-text').value = item.text || '';
+            document.getElementById('edit-location').value = item.location || '';
+            document.getElementById('edit-description').value = item.description || '';
+            document.getElementById('edit-sub').value = item.sub || '';
+            document.getElementById('edit-reservation').checked = !!item.reservation;
+            document.getElementById('edit-modal-title').innerHTML = `<span>✏️</span> 일정 수정하기`;
+            document.getElementById('modal-event-edit').classList.remove('hidden');
+        };
+
+        window.closeEditModal = () => document.getElementById('modal-event-edit').classList.add('hidden');
+
+        // 3. PHOTOS REALTIME LISTEN
+        onSnapshot(photosCol, (snapshot) => {
+            const grid = document.getElementById("photos-grid");
+            if (!grid) return;
+            grid.innerHTML = "";
+            
+            if (snapshot.empty) {
+                grid.innerHTML = `<div class="col-span-full bg-white p-6 rounded-2xl text-center text-slate-400 text-sm cute-card">등록된 사진이 없습니다. 사진을 올려보세요! 📸</div>`;
+                return;
+            }
+
+            snapshot.docs.forEach(docSnap => {
+                const item = docSnap.data();
+                const id = docSnap.id;
+                grid.innerHTML += `
+                    <div class="bg-white rounded-2xl p-3 cute-card border-2 border-xmas-green flex flex-col justify-between">
+                        <img src="${item.imageUrl}" class="w-full h-44 object-cover rounded-xl mb-2" alt="${item.title}">
+                        <div>
+                            <h4 class="font-jua text-slate-800 text-sm">${item.title}</h4>
+                            <p class="text-[11px] text-slate-500 line-clamp-1">${item.caption || ''}</p>
+                            <div class="flex justify-between items-center mt-2 pt-2 border-t text-[10px] text-slate-400 font-bold">
+                                <span>📍 ${item.location || '뉴욕'}</span>
+                                <button onclick="deletePhoto('${id}')" class="text-red-500 hover:underline"><i class="fa-solid fa-trash-can"></i> 삭제</button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+        });
+
+        // 사진 업로드 (자동 압축 포함)
+        document.getElementById("photo-form").addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const fileInput = document.getElementById('p-file');
+            const file = fileInput?.files?.[0];
+            if (!file) return alert('사진 파일을 선택해주세요!');
+
+            try {
+                // 고화질 사진을 800px 크기로 압축하여 용량 축소
+                const compressedBase64 = await compressImageFile(file, 800, 0.6);
+
+                await addDoc(photosCol, {
+                    imageUrl: compressedBase64,
+                    title: document.getElementById('p-title').value,
+                    location: document.getElementById('p-location').value || '뉴욕',
+                    date: document.getElementById('p-date').value || '2026-12-24',
+                    caption: document.getElementById('p-caption').value,
+                    createdAt: serverTimestamp()
+                });
+                
+                closePhotoUploadModal();
+                alert("사진이 성공적으로 올려졌습니다! 📸");
+            } catch (err) {
+                console.error("사진 업로드 에러:", err);
+                alert("사진 처리 도중 문제가 발생했습니다. 파이어베이스 규칙을 확인해주세요.");
+            }
+        });
+
+        window.deletePhoto = async function(id) {
+            if (confirm("이 사진을 삭제하시겠습니까?")) await deleteDoc(doc(db, "photos", id));
+        };
+        window.openPhotoUploadModal = () => document.getElementById('modal-photo-upload').classList.remove('hidden');
+        window.closePhotoUploadModal = () => document.getElementById('modal-photo-upload').classList.add('hidden');
+
+        // 4. VOUCHERS REALTIME LISTEN
+        onSnapshot(vouchersCol, (snapshot) => {
+            const grid = document.getElementById("voucher-grid");
+            if (!grid) return;
+            grid.innerHTML = "";
+
+            snapshot.docs.forEach(docSnap => {
+                const item = docSnap.data();
+                const id = docSnap.id;
+                grid.innerHTML += `
+                    <div class="bg-white rounded-2xl p-4 cute-card border-2 border-xmas-green flex flex-col justify-between">
+                        <div>
+                            <span class="text-xs font-bold px-2.5 py-0.5 rounded-full bg-red-100 text-xmas-darkred border border-red-200">${item.type}</span>
+                            <h4 class="font-jua text-base text-slate-800 mt-2">${item.title}</h4>
+                            <p class="text-xs text-slate-500 mt-1">${item.memo || ''}</p>
+                        </div>
+                        <div class="pt-3 border-t mt-3 flex justify-end">
+                            <button onclick="deleteVoucher('${id}')" class="text-xs font-bold text-red-500 hover:underline"><i class="fa-solid fa-trash-can"></i> 삭제</button>
+                        </div>
+                    </div>
+                `;
+            });
+        });
+
+        document.getElementById("voucher-form").addEventListener("submit", async (e) => {
+            e.preventDefault();
+            await addDoc(vouchersCol, {
+                type: document.getElementById('v-type').value,
+                title: document.getElementById('v-title').value,
+                memo: document.getElementById('v-memo').value,
+                createdAt: serverTimestamp()
+            });
+            closeUploadModal();
+        });
+
+        window.deleteVoucher = async function(id) {
+            if (confirm("이 바우처를 삭제할까요?")) await deleteDoc(doc(db, "vouchers", id));
+        };
+        window.openUploadModal = () => document.getElementById('modal-upload').classList.remove('hidden');
+        window.closeUploadModal = () => document.getElementById('modal-upload').classList.add('hidden');
+
+        // D-DAY CALCULATOR
+        function calculateDday() {
+            const targetDate = new Date("2026-12-23T00:00:00");
+            const diffDays = Math.ceil((targetDate - new Date()) / (1000 * 60 * 60 * 24));
+            const ddayEl = document.getElementById("d-day");
+            if (ddayEl) ddayEl.innerText = diffDays > 0 ? `D-${diffDays}` : (diffDays === 0 ? "D-DAY!" : `D+${Math.abs(diffDays)}`);
+        }
+        calculateDday();
+
+        console.log("🎄 사진 자동 압축 업로드 모듈 준비 완료!");
     </script>
 </body>
 </html>
