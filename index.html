@@ -1381,12 +1381,15 @@
 
         function saveItineraryData() {
             localStorage.setItem('nyc_itinerary_data', JSON.stringify(currentItinerary));
+            if (typeof window.syncToFirebase === 'function') {
+                window.syncToFirebase();
+            }
         }
 
         function resetItineraryData() {
             if (confirm('초기 뉴욕 추천 일정으로 복원하시겠습니까? (직접 추가/수정한 내용이 초기화됩니다)')) {
                 currentItinerary = JSON.parse(JSON.stringify(ITINERARY_DATA));
-                localStorage.removeItem('nyc_itinerary_data');
+                saveItineraryData();
                 renderItinerary();
             }
         }
@@ -1397,6 +1400,9 @@
         function toggleChecklist(id) {
             checkedListState[id] = !checkedListState[id];
             localStorage.setItem('nyc_checklist', JSON.stringify(checkedListState));
+            if (typeof window.syncToFirebase === 'function') {
+                window.syncToFirebase();
+            }
             renderChecklist();
         }
 
@@ -1549,6 +1555,9 @@
 
                 userPhotos.unshift(newPhoto);
                 localStorage.setItem('nyc_photos', JSON.stringify(userPhotos));
+                if (typeof window.syncToFirebase === 'function') {
+                    window.syncToFirebase();
+                }
                 renderPhotos();
                 closePhotoUploadModal();
             } catch (err) {
@@ -1580,6 +1589,9 @@
             if (confirm('이 사진을 사진첩에서 정말 삭제하시겠습니까?')) {
                 userPhotos = userPhotos.filter(p => p.id !== activeSelectedPhotoId);
                 localStorage.setItem('nyc_photos', JSON.stringify(userPhotos));
+                if (typeof window.syncToFirebase === 'function') {
+                    window.syncToFirebase();
+                }
                 renderPhotos();
                 closePhotoViewerModal();
             }
@@ -1658,6 +1670,9 @@
 
             userVouchers.push(newVoucher);
             localStorage.setItem('nyc_vouchers', JSON.stringify(userVouchers));
+            if (typeof window.syncToFirebase === 'function') {
+                window.syncToFirebase();
+            }
             renderVouchers();
             closeUploadModal();
         }
@@ -1707,28 +1722,28 @@
             if (confirm('이 바우처를 삭제하시겠습니까?')) {
                 userVouchers = userVouchers.filter(v => v.id !== activeSelectedVoucherId);
                 localStorage.setItem('nyc_vouchers', JSON.stringify(userVouchers));
+                if (typeof window.syncToFirebase === 'function') {
+                    window.syncToFirebase();
+                }
                 renderVouchers();
                 closeViewerModal();
             }
         }
     </script>
-<!-- ──────────────────────────────────────────────────────────── -->
-    <!-- 🔥 파이어베이스 100% 완전 실시간 동기화 스크립트 -->
+
+    <!-- ──────────────────────────────────────────────────────────── -->
+    <!-- 🔥 완벽한 실시간 연동 (Firebase 동기화 모듈) -->
     <!-- ──────────────────────────────────────────────────────────── -->
     <script type="module">
       import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
       import { 
         getFirestore, 
-        collection, 
-        onSnapshot, 
-        addDoc, 
         doc, 
-        updateDoc, 
-        deleteDoc, 
-        serverTimestamp 
+        onSnapshot, 
+        setDoc 
       } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-      // 1. 파이어베이스 설정
+      // 1. Firebase 설정
       const firebaseConfig = {
         apiKey: "AIzaSyA1oEiOIuz0Sfb9JgEoQaHx7t4Ve01YDvI",
         authDomain: "nyc-trip-pastababdori.firebaseapp.com",
@@ -1741,115 +1756,63 @@
 
       const app = initializeApp(firebaseConfig);
       const db = getFirestore(app);
+      const docRef = doc(db, "nyc_trip_plan", "shared_data");
 
-      const itineraryCol = collection(db, "itineraries");
-      const photosCol = collection(db, "photos");
+      let isUpdatingFromRemote = false;
 
-      // 2. localStorage(기존 로컬 저장소) 강제 차단 및 파이어베이스 데이터 바인딩
-      let remoteItineraries = [];
+      // 2. 실시간 데이터 수신 (상대방이 고치면 화면 즉시 반영)
+      onSnapshot(docRef, (snapshot) => {
+        if (snapshot.exists()) {
+          const data = snapshot.data();
+          isUpdatingFromRemote = true;
 
-      // 실시간 데이터 수신 리스너 (상대방이 고쳐도 내 화면이 즉시 바뀜)
-      onSnapshot(itineraryCol, (snapshot) => {
-        remoteItineraries = snapshot.docs.map(docSnap => ({
-          id: docSnap.id,
-          ...docSnap.data()
-        }));
+          if (data.currentItinerary) {
+            window.currentItinerary = data.currentItinerary;
+            localStorage.setItem('nyc_itinerary_data', JSON.stringify(data.currentItinerary));
+            if (typeof window.renderItinerary === 'function') window.renderItinerary();
+          }
 
-        console.log("🔥 파이어베이스 수신 성공:", remoteItineraries);
+          if (data.checkedListState) {
+            window.checkedListState = data.checkedListState;
+            localStorage.setItem('nyc_checklist', JSON.stringify(data.checkedListState));
+            if (typeof window.renderChecklist === 'function') window.renderChecklist();
+          }
 
-        // 기존 전역 데이터 구조 강제 업데이트
-        if (window.itineraryData !== undefined) {
-          window.itineraryData = remoteItineraries;
-        }
-        
-        // 기존 렌더링 함수 자동 찾아 실행
-        const renderFn = window.renderItinerary || window.renderEvents || window.renderUI || window.initUI;
-        if (typeof renderFn === "function") {
-          renderFn();
+          if (data.userVouchers) {
+            window.userVouchers = data.userVouchers;
+            localStorage.setItem('nyc_vouchers', JSON.stringify(data.userVouchers));
+            if (typeof window.renderVouchers === 'function') window.renderVouchers();
+          }
+
+          if (data.userPhotos) {
+            window.userPhotos = data.userPhotos;
+            localStorage.setItem('nyc_photos', JSON.stringify(data.userPhotos));
+            if (typeof window.renderPhotos === 'function') window.renderPhotos();
+          }
+
+          isUpdatingFromRemote = false;
         } else {
-          // 기존 함수를 직접 호출하지 못할 경우 DOM 직접 갱신
-          updateItineraryDOM(remoteItineraries);
+          // 문서가 없는 경우 최초 내 데이터를 DB로 올림
+          window.syncToFirebase();
         }
       });
 
-      // 3. 버튼 이벤트 파이어베이스 DB로 오버라이딩 (저장 버튼 누르면 DB로 보냄)
-      window.handleSaveEvent = async function(event) {
-        if(event) event.preventDefault();
+      // 3. 내 데이터 DB 업로드 전역 함수
+      window.syncToFirebase = function() {
+        if (isUpdatingFromRemote) return;
         
-        const id = document.getElementById("edit-evt-id")?.value;
-        const eventData = {
-          day: document.getElementById("edit-day")?.value || "1",
-          time: document.getElementById("edit-time")?.value || "",
-          text: document.getElementById("edit-text")?.value || "",
-          location: document.getElementById("edit-location")?.value || "",
-          description: document.getElementById("edit-description")?.value || "",
-          sub: document.getElementById("edit-sub")?.value || "",
-          reservation: document.getElementById("edit-reservation")?.checked || false,
-          updatedAt: serverTimestamp()
+        const payload = {
+          currentItinerary: window.currentItinerary,
+          checkedListState: window.checkedListState,
+          userVouchers: window.userVouchers,
+          userPhotos: window.userPhotos,
+          updatedAt: new Date().toISOString()
         };
 
-        try {
-          if (id) {
-            await updateDoc(doc(db, "itineraries", id), eventData);
-          } else {
-            eventData.createdAt = serverTimestamp();
-            await addDoc(itineraryCol, eventData);
-          }
-          if (typeof closeEditModal === "function") closeEditModal();
-          alert("🎉 파이어베이스 DB에 저장되어 상대방 화면에도 실시간으로 공유됩니다!");
-        } catch (err) {
-          console.error("저장 실패:", err);
-          alert("저장 실패: 파이어베이스 규칙(Rules)을 확인해주세요.");
-        }
+        setDoc(docRef, payload)
+          .then(() => console.log("🔥 파이어베이스 실시간 동기화 완료!"))
+          .catch(err => console.error("동기화 실패:", err));
       };
-
-      // 4. 삭제 이벤트 오버라이딩
-      window.triggerDeleteFromDetail = async function(id) {
-        const targetId = id || window.currentDetailId || document.getElementById("edit-evt-id")?.value;
-        if (!targetId) return;
-
-        if (confirm("정말 이 일정을 삭제하시겠습니까? (상대방 화면에서도 같이 삭제됩니다)")) {
-          try {
-            await deleteDoc(doc(db, "itineraries", targetId));
-            if (typeof closeDetailModal === "function") closeDetailModal();
-            if (typeof closeEditModal === "function") closeEditModal();
-            alert("삭제되었습니다.");
-          } catch (err) {
-            console.error("삭제 실패:", err);
-          }
-        }
-      };
-
-      // 화면 강제 렌더링 보조 함수
-      function updateItineraryDOM(items) {
-        const listContainer = document.getElementById("itinerary-list");
-        if (!listContainer) return;
-        
-        listContainer.innerHTML = "";
-        if (items.length === 0) {
-          listContainer.innerHTML = `<div class="bg-white p-6 rounded-2xl text-center text-slate-400 text-sm cute-card">등록된 일정이 없습니다. 일정을 추가해보세요!</div>`;
-          return;
-        }
-
-        items.forEach(item => {
-          listContainer.innerHTML += `
-            <div class="bg-white p-4 rounded-2xl cute-card flex items-center justify-between mb-3">
-              <div>
-                <span class="text-xs font-bold text-xmas-red bg-red-100 px-2 py-0.5 rounded-md">Day ${item.day}</span>
-                <span class="text-xs text-slate-500 font-bold ml-1">${item.time || ''}</span>
-                <h4 class="font-jua text-lg text-slate-800 mt-1">${item.text || ''}</h4>
-                <p class="text-xs text-slate-600">${item.description || ''}</p>
-              </div>
-              <button onclick="triggerDeleteFromDetail('${item.id}')" class="text-slate-300 hover:text-red-500 text-lg px-2">
-                <i class="fa-solid fa-trash-can"></i>
-              </button>
-            </div>
-          `;
-        });
-      }
-
-      console.log("🎄 파이어베이스 실시간 공유 엔진 활성화 완료!");
     </script>
-
 </body>
 </html>
